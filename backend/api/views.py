@@ -9,6 +9,8 @@ from django.views.decorators.http import require_GET, require_POST
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
 
+from lib.food_recommender import should_recommend
+
 from .models import Food, MenuEntry, UserRating
 
 LOCATION_NAME = 'The Commons'
@@ -43,15 +45,18 @@ def menu(request, date, period):
 
     gmail = request.session.get('gmail')
     votes = {}
+    ratings = []
     if gmail:
-        food_ids = [e.food_id for e in entries]
-        votes = dict(UserRating.objects.filter(gmail=gmail, food_id__in=food_ids)
-                     .values_list('food_id', 'is_upvoted'))
+        user_ratings = list(UserRating.objects.filter(gmail=gmail)
+                            .values_list('food_id', 'food__name', 'is_upvoted'))
+        votes = {food_id: liked for food_id, _, liked in user_ratings}
+        ratings = [(gmail, name, liked) for _, name, liked in user_ratings]
 
     items = [
         {
             'food': e.food,
             'vote': None if e.food_id not in votes else 'up' if votes[e.food_id] else 'down',
+            'recommended': bool(ratings) and should_recommend(e.food.name, ratings, gmail),
         }
         for e in entries
     ]

@@ -40,6 +40,36 @@ class MenuViewTests(TestCase):
         self.assertEqual(resp.status_code, 302)
         self.assertTrue(resp.url.endswith('/lunch/'))
 
+    @mock.patch('api.views.should_recommend')
+    def test_no_recommendations_without_rating_history(self, recommend):
+        self.assertNotContains(self.client.get(menu_url()), 'You might like this')
+        session = self.client.session
+        session['gmail'] = 'spartan@sjsu.edu'
+        session.save()
+        self.assertNotContains(self.client.get(menu_url()), 'You might like this')
+        recommend.assert_not_called()
+
+    @mock.patch('api.views.should_recommend')
+    def test_recommendations_use_only_current_users_full_history(self, recommend):
+        gmail = 'spartan@sjsu.edu'
+        session = self.client.session
+        session['gmail'] = gmail
+        session.save()
+        # Soup is on a different meal's menu, but still informs recommendations.
+        UserRating.objects.create(gmail=gmail, food=self.soup, is_upvoted=True)
+        UserRating.objects.create(gmail='other@sjsu.edu', food=self.pizza, is_upvoted=False)
+        recommend.return_value = True
+
+        resp = self.client.get(menu_url())
+        recommend.assert_called_once_with('Pepperoni Pizza', [(gmail, 'Tomato Soup', True)], gmail)
+        self.assertContains(resp, 'You might like this', count=1)
+        self.assertContains(resp, 'bg-green-50')
+
+        recommend.return_value = False
+        resp = self.client.get(menu_url())
+        self.assertNotContains(resp, 'You might like this')
+        self.assertNotContains(resp, 'bg-green-50')
+
 
 class VoteTests(TestCase):
     def setUp(self):
@@ -92,7 +122,8 @@ class VoteTests(TestCase):
         self.vote('down')  # clicking the active thumb clears it
         self.assertFalse(UserRating.objects.exists())
 
-    def test_vote_state_rendered(self):
+    @mock.patch('api.views.should_recommend', return_value=True)
+    def test_vote_state_rendered(self, recommend):
         MenuEntry.objects.create(food=self.food, date=DAY, meal_period='lunch')
         self.login()
         self.vote('up')
