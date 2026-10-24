@@ -35,8 +35,24 @@ class MenuItem(models.Model):
             models.UniqueConstraint(
                 fields=["food", "service_date", "meal"],
                 name="one_food_per_menu_slot",
-            # This makes the scheduler safe to run multiple times. 
-            # A user would not receive two recommendation emails for the same day.
-            )
+           )
         ]
 
+class RecommendationDelivery(models.Model):
+    gmail = models.EmailField()
+    recommendation_date = models.DateField()
+    subject = models.CharField(max_length=255)
+    items = models.JSONField(default=list)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    error = models.TextField(blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["gmail", "recommendation_date"],
+                name="one_daily_email_per_user",
+                # This makes the scheduler safe to run multiple times. 
+                # A user would not receive two recommendation emails for the same day.
+                            
+            )
+        ]
