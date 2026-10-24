@@ -13,5 +13,18 @@ services:
       - db-data:/data
     restart: unless-stopped
 
+  # Emails daily recommendations at RECOMMENDATION_SEND_TIME (America/Los_Angeles).
+  scheduler:
+    image: sparkhill-backend
+    command: python manage.py schedule_recommendations
+    env_file: backend/.env
+    environment:
+      RECOMMENDATION_SEND_TIME: "20:00"
+    volumes:
+      - db-data:/data
+    depends_on:
+      - web
+    restart: unless-stopped
+
 volumes:
   db-data:
