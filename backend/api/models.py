@@ -15,3 +15,28 @@ class UserRatings(models.Model):
 class UserDownvotes(models.Model):
     gmail = models.EmailField()
     food = models.ForeignKey(Food, on_delete=models.PROTECT, related_name='user_downvotes')
+
+# This part of the code is for defining food (ex: "Pizza").
+# The date it is offered (ex: October 23), and the meal it is offered at (ex: lunch).
+
+class MenuItem(models.Model):
+    MEAL_CHOICES = [
+        ("breakfast", "Breakfast"),
+        ("lunch", "Lunch"),
+        ("dinner", "Dinner"),
+    ]
+
+    food = models.ForeignKey(Food, on_delete=models.CASCADE)
+    service_date = models.DateField()
+    meal = models.CharField(max_length=20, choices=MEAL_CHOICES)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["food", "service_date", "meal"],
+                name="one_food_per_menu_slot",
+            # This makes the scheduler safe to run multiple times. 
+            # A user would not receive two recommendation emails for the same day.
+            )
+        ]
+
