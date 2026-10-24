@@ -13,9 +13,12 @@ from __future__ import annotations
 from datetime import date as Date
 import json
 import re
+import ssl
 from typing import Any, Callable
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+
+import certifi
 
 
 LOCATION = "The Commons"
@@ -142,7 +145,8 @@ def _fetch_json(url: str, timeout: float) -> Any:
             "Referer": "https://dineoncampus.com/sjsu/",
         },
     )
-    with urlopen(request, timeout=timeout) as response:
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
+    with urlopen(request, timeout=timeout, context=ssl_context) as response:
         return json.load(response)
 
 
