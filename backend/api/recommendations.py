@@ -3,23 +3,21 @@
 
 from django.db.models import Avg
 
-from .models import MenuEntry, UserDownvotes, UserRatings
+from .models import MenuEntry, UserRating
 
 
 def get_recommendations_for_user(gmail, recommendation_date):
-    downvoted_food_ids = UserDownvotes.objects.filter(
-        gmail=gmail
+    downvoted_food_ids = UserRating.objects.filter(
+        gmail=gmail,
+        is_upvoted=False,
     ).values_list("food_id", flat=True)
 
     menu_entries = (
         MenuEntry.objects
-        .filter(
-            location="the-commons",
-            date=recommendation_date,
-        )
+        .filter(date=recommendation_date)
         .exclude(food_id__in=downvoted_food_ids)
         .annotate(
-            average_rating=Avg("food__user_ratings__rating"),
+            average_rating=Avg("food__user_ratings__is_upvoted"),
         )
         .order_by("-average_rating", "food__name")
     )
@@ -28,17 +26,15 @@ def get_recommendations_for_user(gmail, recommendation_date):
 
     for entry in menu_entries:
         personal_rating = (
-            UserRatings.objects
+            UserRating.objects
             .filter(gmail=gmail, food=entry.food)
-            .values_list("rating", flat=True)
+            .values_list("is_upvoted", flat=True)
             .first()
         )
 
-        # Prefer foods that this user rated highly.
-        if personal_rating is not None and personal_rating >= 4:
-            score = 100 + float(personal_rating)
-        elif personal_rating is not None:
-            score = float(personal_rating)
+        # Prefer foods this user explicitly upvoted.
+        if personal_rating is True:
+            score = 100.0
         else:
             score = float(entry.average_rating or 0)
 
@@ -48,9 +44,9 @@ def get_recommendations_for_user(gmail, recommendation_date):
                 "meal": entry.meal_period,
                 "score": score,
                 "personal_rating": (
-                    float(personal_rating)
-                    if personal_rating is not None
-                    else None
+                    None
+                    if personal_rating is None
+                    else 1.0 if personal_rating else 0.0
                 ),
                 "average_rating": float(entry.average_rating or 0),
             }

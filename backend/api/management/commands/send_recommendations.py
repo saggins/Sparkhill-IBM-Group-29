@@ -2,7 +2,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from api.email_service import send_daily_recommendation
-from api.models import UserDownvotes, UserRatings
+from api.models import UserRating
 
 
 class Command(BaseCommand):
@@ -11,17 +11,12 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         recommendation_date = timezone.localdate()
 
-        rating_users = UserRatings.objects.values_list(
+        users = UserRating.objects.values_list(
             "gmail",
             flat=True,
         )
 
-        downvote_users = UserDownvotes.objects.values_list(
-            "gmail",
-            flat=True,
-        )
-
-        users = set(rating_users).union(set(downvote_users))
+        users = set(users)
 
         if not users:
             self.stdout.write("No users found.")

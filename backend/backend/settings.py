@@ -48,6 +48,10 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
+# Google Identity Services opens a popup and needs the page's origin in the Referer.
+SECURE_CROSS_ORIGIN_OPENER_POLICY = 'same-origin-allow-popups'
+SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+
 
 # Application definition
 
@@ -58,7 +62,6 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'rest_framework',
     'api'
 ]
 

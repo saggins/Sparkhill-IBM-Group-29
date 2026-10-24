@@ -6,8 +6,6 @@ from django.db.models import Max
 
 from api.models import Food, MenuEntry
 
-MENU_URL = 'https://dineoncampus.com/SJSU/whats-on-the-menu/{location}/{date}/{period}'
-
 
 def normalize(name):
     # Same whitespace rule as lib.food_recommender, but keep the original casing for display.
@@ -15,10 +13,9 @@ def normalize(name):
 
 
 class Command(BaseCommand):
-    help = 'Load one meal period of a dining hall menu into MenuEntry.'
+    help = 'Load one meal period of The Commons menu into MenuEntry.'
 
     def add_arguments(self, parser):
-        parser.add_argument('--location', default='the-commons')
         parser.add_argument('--date', default=None, help='YYYY-MM-DD (default: today)')
         parser.add_argument(
             '--period', required=True, choices=[p for p, _ in MenuEntry.MEAL_PERIODS]
@@ -38,8 +35,8 @@ class Command(BaseCommand):
         except ValueError:
             raise CommandError(f"Bad --date {options['date']!r}, expected YYYY-MM-DD.")
 
-        location, period = options['location'], options['period']
-        names = self.load_names(options['names_file'], location, date, period)
+        period = options['period']
+        names = self.load_names(options['names_file'], date, period)
 
         # De-dupe case-insensitively while keeping first-seen order.
         unique = {}
@@ -52,7 +49,7 @@ class Command(BaseCommand):
         if options['dry_run']:
             for name in names:
                 self.stdout.write(f'  {name}')
-            self.stdout.write(f'Would save {len(names)} items for {location} {date} {period}.')
+            self.stdout.write(f'Would save {len(names)} items for {date} {period}.')
             return
 
         created_foods = created_entries = 0
@@ -65,26 +62,27 @@ class Command(BaseCommand):
                     next_food_id += 1
                     created_foods += 1
                 _, created = MenuEntry.objects.get_or_create(
-                    food=food, location=location, date=date, meal_period=period
+                    food=food, date=date, meal_period=period
                 )
                 created_entries += created
 
         self.stdout.write(self.style.SUCCESS(
-            f'{location} {date} {period}: {len(names)} items '
+            f'{date} {period}: {len(names)} items '
             f'({created_foods} new foods, {created_entries} new menu entries).'
         ))
 
-    def load_names(self, names_file, location, date, period):
+    def load_names(self, names_file, date, period):
         if names_file:
             with open(names_file) as f:
                 return f.read().splitlines()
 
+        from urllib.error import URLError
+
+        from lib.menu_scraper import MenuScrapeError, scrape_menu
+
+        self.stdout.write(f'Scraping The Commons {period} for {date}')
         try:
-            from lib.scraper import scrape_menu
-        except ImportError:
-            raise CommandError(
-                'lib.scraper.scrape_menu not found. Use --names-file until the scraper lands.'
-            )
-        url = MENU_URL.format(location=location, date=date.isoformat(), period=period)
-        self.stdout.write(f'Scraping {url}')
-        return scrape_menu(url)
+            restaurants = scrape_menu(date, period)
+        except (MenuScrapeError, URLError) as e:
+            raise CommandError(f'Menu scrape failed: {e}')
+        return [food for foods in restaurants.values() for food in foods]

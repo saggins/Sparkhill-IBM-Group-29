@@ -1,28 +1,32 @@
 import datetime
+import logging
 
-from django.core.exceptions import ValidationError
-from django.core.validators import validate_email
-from django.http import Http404, HttpResponseBadRequest
+from django.conf import settings
+from django.http import Http404, HttpResponseBadRequest, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET, require_POST
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token
 
-from .models import Food, MenuEntry, UserDownvotes, UserRatings
+from lib.food_recommender import should_recommend
 
-LOCATIONS = {'the-commons': 'The Commons'}
+from .models import Food, MenuEntry, UserRating
+
+LOCATION_NAME = 'The Commons'
 PERIODS = dict(MenuEntry.MEAL_PERIODS)
-THUMBS_UP_RATING = 5.0
+logger = logging.getLogger(__name__)
 
 
 @require_GET
 def home(request):
-    return redirect('menu', location='the-commons', date=timezone.localdate().isoformat(), period='lunch')
+    return redirect('menu', date=timezone.localdate().isoformat(), period='lunch')
 
 
 @require_GET
-def menu(request, location, date, period):
-    if location not in LOCATIONS or period not in PERIODS:
+def menu(request, date, period):
+    if period not in PERIODS:
         raise Http404
     try:
         day = datetime.date.fromisoformat(date)
@@ -32,35 +36,48 @@ def menu(request, location, date, period):
     # Date picker submits ?date=YYYY-MM-DD; turn it into a clean URL.
     picked = request.GET.get('date')
     if picked and picked != date:
-        return redirect('menu', location=location, date=picked, period=period)
+        return redirect('menu', date=picked, period=period)
 
     entries = (
         MenuEntry.objects
-        .filter(location=location, date=day, meal_period=period)
+        .filter(date=day, meal_period=period)
         .select_related('food')
         .order_by('food__name')
     )
 
     gmail = request.session.get('gmail')
-    liked, disliked = set(), set()
+    votes = {}
+    ratings = []
     if gmail:
-        food_ids = [e.food_id for e in entries]
-        liked = set(UserRatings.objects.filter(gmail=gmail, food_id__in=food_ids, rating__gte=3)
-                    .values_list('food_id', flat=True))
-        disliked = set(UserDownvotes.objects.filter(gmail=gmail, food_id__in=food_ids)
-                       .values_list('food_id', flat=True))
+        user_ratings = list(UserRating.objects.filter(gmail=gmail)
+                            .values_list('food_id', 'food__name', 'is_upvoted'))
+        votes = {food_id: liked for food_id, _, liked in user_ratings}
+        ratings = [(gmail, name, liked) for _, name, liked in user_ratings]
 
     items = [
         {
             'food': e.food,
-            'vote': 'up' if e.food_id in liked else 'down' if e.food_id in disliked else None,
+            'vote': None if e.food_id not in votes else 'up' if votes[e.food_id] else 'down',
+            'recommended': votes.get(e.food_id, False),
         }
         for e in entries
     ]
 
+    # Known votes need no model, and dislikes alone cannot yield recommendations.
+    if any(liked for _, _, liked in ratings):
+        try:
+            for item in items:
+                if item['vote'] is None:
+                    item['recommended'] = should_recommend(item['food'].name, ratings, gmail)
+        except Exception:
+            # A model download/inference failure must not hide a saved vote.
+            logger.exception('Could not generate menu recommendations')
+
+    # Stable sort keeps the alphabetical order within each group.
+    items.sort(key=lambda item: not item['recommended'])
+
     return render(request, 'api/menu.html', {
-        'location': location,
-        'location_name': LOCATIONS[location],
+        'location_name': LOCATION_NAME,
         'day': day,
         'prev_day': (day - datetime.timedelta(days=1)).isoformat(),
         'next_day': (day + datetime.timedelta(days=1)).isoformat(),
@@ -82,38 +99,55 @@ def _safe_next(request):
 def vote(request):
     gmail = request.session.get('gmail')
     if not gmail:
-        return HttpResponseBadRequest('Set your email before voting.')
+        return HttpResponseBadRequest('Sign in before voting.')
 
     choice = request.POST.get('vote')
     if choice not in ('up', 'down'):
         return HttpResponseBadRequest('vote must be "up" or "down".')
     food = get_object_or_404(Food, pk=request.POST.get('food_id'))
+    is_upvoted = choice == 'up'
 
-    ratings = UserRatings.objects.filter(gmail=gmail, food=food)
-    downvotes = UserDownvotes.objects.filter(gmail=gmail, food=food)
+    existing = UserRating.objects.filter(gmail=gmail, food=food).first()
     # Clicking the thumb that's already active clears the vote.
-    already = ratings.filter(rating__gte=3).exists() if choice == 'up' else downvotes.exists()
-
-    ratings.delete()
-    downvotes.delete()
-    if not already:
-        if choice == 'up':
-            UserRatings.objects.create(gmail=gmail, food=food, rating=THUMBS_UP_RATING)
-        else:
-            UserDownvotes.objects.create(gmail=gmail, food=food)
+    if existing and existing.is_upvoted == is_upvoted:
+        existing.delete()
+    else:
+        UserRating.objects.update_or_create(gmail=gmail, food=food, defaults={'is_upvoted': is_upvoted})
 
     return redirect(_safe_next(request))
 
 
+@require_GET
+def login(request):
+    nxt = request.GET.get('next', '')
+    if not url_has_allowed_host_and_scheme(nxt, allowed_hosts={request.get_host()}):
+        nxt = '/'
+    return render(request, 'api/login.html', {
+        'google_client_id': settings.GOOGLE_OAUTH_CLIENT_ID,
+        'next': nxt,
+    })
+
+
 @require_POST
-def identify(request):
-    gmail = request.POST.get('gmail', '').strip().lower()
-    if gmail:
-        try:
-            validate_email(gmail)
-        except ValidationError:
-            return HttpResponseBadRequest('Enter a valid email address.')
-        request.session['gmail'] = gmail
-    else:
-        request.session.pop('gmail', None)
+def google_auth(request):
+    token = request.POST.get('credential')
+    if not token:
+        return HttpResponseBadRequest('Missing Google credential.')
+    try:
+        user_data = id_token.verify_oauth2_token(
+            token, google_requests.Request(), settings.GOOGLE_OAUTH_CLIENT_ID
+        )
+    except ValueError:
+        return HttpResponseForbidden('Invalid Google credential.')
+    if not user_data.get('email_verified'):
+        return HttpResponseForbidden('Google account email is not verified.')
+
+    request.session.cycle_key()
+    request.session['gmail'] = user_data['email'].lower()
+    return redirect(_safe_next(request))
+
+
+@require_POST
+def logout(request):
+    request.session.flush()
     return redirect(_safe_next(request))

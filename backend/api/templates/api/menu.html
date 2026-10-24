@@ -6,20 +6,20 @@
 <h1 class="text-2xl font-bold">{{ location_name }}</h1>
 
 <div class="mt-4 flex items-center gap-2">
-  <a href="{% url 'menu' location prev_day period %}"
+  <a href="{% url 'menu' prev_day period %}"
      class="rounded border bg-white px-3 py-1.5 hover:bg-slate-100" aria-label="Previous day">&larr;</a>
   <form method="get" class="flex-1">
     <input type="date" name="date" value="{{ day|date:'Y-m-d' }}" onchange="this.form.submit()"
            class="w-full rounded border bg-white px-3 py-1.5">
   </form>
-  <a href="{% url 'menu' location next_day period %}"
+  <a href="{% url 'menu' next_day period %}"
      class="rounded border bg-white px-3 py-1.5 hover:bg-slate-100" aria-label="Next day">&rarr;</a>
 </div>
 <p class="mt-1 text-sm text-slate-500">{{ day|date:"l, F j, Y" }}</p>
 
 <nav class="mt-4 flex border-b overflow-x-auto">
   {% for key, label in periods %}
-    <a href="{% url 'menu' location day|date:'Y-m-d' key %}"
+    <a href="{% url 'menu' day|date:'Y-m-d' key %}"
        class="px-4 py-2 -mb-px border-b-2 whitespace-nowrap
               {% if key == period %}border-[#0055A2] text-[#0055A2] font-semibold{% else %}border-transparent text-slate-600 hover:text-slate-900{% endif %}">
       {{ label }}
@@ -29,15 +29,20 @@
 
 {% if not gmail and items %}
   <p class="mt-4 rounded bg-amber-50 border border-amber-200 px-3 py-2 text-sm">
-    Enter your email at the top to rate dishes.
+    <a href="{% url 'login' %}?next={{ request.get_full_path|urlencode }}" class="underline">Sign in with Google</a> to rate dishes.
   </p>
 {% endif %}
 
 {% if items %}
-  <ul class="mt-4 divide-y rounded-lg border bg-white">
+  <ul class="mt-4 divide-y overflow-hidden rounded-lg border bg-white">
     {% for item in items %}
-      <li class="flex items-center justify-between gap-3 px-4 py-3">
-        <span>{{ item.food.name }}</span>
+      <li class="flex items-center justify-between gap-3 px-4 py-3{% if item.recommended %} bg-green-50{% endif %}">
+        <div>
+          <span{% if item.recommended %} class="font-semibold text-green-900"{% endif %}>{{ item.food.name }}</span>
+          {% if item.recommended %}
+            <span class="mt-1 block text-xs font-medium text-green-700">You might like this</span>
+          {% endif %}
+        </div>
         <form method="post" action="{% url 'vote' %}" class="flex gap-1 shrink-0">
           {% csrf_token %}
           <input type="hidden" name="food_id" value="{{ item.food.pk }}">

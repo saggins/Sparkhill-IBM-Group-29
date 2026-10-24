@@ -1,0 +1,35 @@
+{% extends "api/base.html" %}
+
+{% block title %}Sign in · SJSU Dining{% endblock %}
+
+{% block content %}
+<div class="mx-auto mt-12 max-w-sm rounded-lg border bg-white p-8 text-center">
+  <h1 class="text-2xl font-bold">Sign in</h1>
+  <p class="mt-2 text-sm text-slate-500">Use your Google account to rate dishes.</p>
+
+  <form id="google-auth-form" method="post" action="{% url 'google-auth' %}">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ next }}">
+    <input type="hidden" name="credential">
+  </form>
+
+  <div id="g_id_onload"
+       data-client_id="{{ google_client_id }}"
+       data-callback="onGoogleCredential"
+       data-auto_prompt="false"></div>
+  <div class="mt-6 flex justify-center">
+    <div class="g_id_signin" data-type="standard" data-theme="outline" data-size="large"
+         data-text="signin_with" data-shape="pill"></div>
+  </div>
+</div>
+
+<script>
+  // GIS hands us the ID token; post it with Django's CSRF token so the session cookie sticks.
+  function onGoogleCredential(response) {
+    const form = document.getElementById('google-auth-form');
+    form.credential.value = response.credential;
+    form.submit();
+  }
+</script>
+<script src="https://accounts.google.com/gsi/client" async></script>
+{% endblock %}
