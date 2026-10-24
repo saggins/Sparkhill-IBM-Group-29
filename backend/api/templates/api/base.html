@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}SJSU Dining{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen">
+  <header class="bg-[#0055A2] text-white">
+    <div class="max-w-3xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+      <a href="{% url 'home' %}" class="font-semibold text-lg">SJSU Dining</a>
+      <form method="post" action="{% url 'identify' %}" class="flex items-center gap-2 text-sm">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        {% if gmail %}
+          <span class="opacity-90">{{ gmail }}</span>
+          <button name="gmail" value="" class="underline opacity-80 hover:opacity-100">change</button>
+        {% else %}
+          <input type="email" name="gmail" required placeholder="you@sjsu.edu"
+                 class="rounded px-2 py-1 text-slate-900 w-44">
+          <button class="rounded bg-[#E5A823] text-slate-900 font-medium px-3 py-1">Save</button>
+        {% endif %}
+      </form>
+    </div>
+  </header>
+  <main class="max-w-3xl mx-auto px-4 py-6">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
