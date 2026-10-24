@@ -46,3 +46,20 @@ class MenuEntry(models.Model):
 
     def __str__(self):
         return f'{self.food} {self.date} {self.meal_period}'
+
+
+class RecommendationDelivery(models.Model):
+    gmail = models.EmailField()
+    recommendation_date = models.DateField()
+    subject = models.CharField(max_length=255)
+    items = models.JSONField(default=list)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    error = models.TextField(blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['gmail', 'recommendation_date'],
+                name='one_daily_email_per_user',
+            ),
+        ]

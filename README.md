@@ -50,7 +50,49 @@ python manage.py seed_menu --period dinner --date 2026-10-24   # specific date
 python manage.py seed_menu --period breakfast --dry-run        # print items, save nothing
 python manage.py seed_menu --period lunch --names-file foods.txt   # skip scraping, one name per line
 ```
+To get all three meals for today, run:
+```
+for meal in breakfast lunch dinner; do
+  python3 manage.py seed_menu --period "$meal"
+done
+```
+to load multiple days (ex: 7 days), run:
+```
+for offset in {0..6}; do
+  day=$(date -v+${offset}d +%Y-%m-%d)
+
+  for meal in breakfast lunch dinner; do
+    echo "Loading $day $meal"
+    python3 manage.py seed_menu \
+      --date "$day" \
+      --period "$meal"
+  done
+done
+```
+
+For 14 days, change: {0..6} to: {0..13}, etc.
+
 
 `--period` is required: `breakfast`, `lunch`, or `dinner`.
 
 Note: `lib/food_recommender.py` downloads an embedding model via `fastembed` on first use.
+
+## Web Link
+
+https://sjsufood.sagg.in
+
+## Deployment
+
+Set the variables in `.env.example` in the hosting provider's environment.
+For the deployed site, use `DEBUG=False`, set `ALLOWED_HOSTS` to the public
+hostname, configure SMTP credentials, and run:
+
+```sh
+cd backend
+python manage.py migrate
+python manage.py collectstatic --noinput
+gunicorn backend.wsgi:application --bind 0.0.0.0:$PORT
+```
+
+The menu and email jobs must be scheduled separately. Run `seed_menu` for
+each published meal before `send_recommendations`.

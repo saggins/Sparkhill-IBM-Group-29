@@ -78,11 +78,13 @@ class Command(BaseCommand):
 
         from urllib.error import URLError
 
+        from requests import RequestException
+
         from lib.menu_scraper import MenuScrapeError, scrape_menu
 
         self.stdout.write(f'Scraping The Commons {period} for {date}')
         try:
             restaurants = scrape_menu(date, period)
-        except (MenuScrapeError, URLError) as e:
+        except (MenuScrapeError, RequestException, URLError) as e:
             raise CommandError(f'Menu scrape failed: {e}')
         return [food for foods in restaurants.values() for food in foods]

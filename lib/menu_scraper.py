@@ -15,7 +15,9 @@ import json
 import re
 from typing import Any, Callable
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+
+import certifi
+import requests
 
 
 LOCATION = "The Commons"
@@ -61,7 +63,30 @@ def scrape_menu(
 
     date_text = _format_date(menu_date)
     meal_text = _normalise_meal(meal)
-    get_json = fetch_json or _fetch_json
+    if fetch_json is not None:
+        get_json = fetch_json
+    else:
+        session = requests.Session()
+        session.headers.update(
+            {
+                "Accept": "application/json, text/plain, */*",
+                "Accept-Language": "en-US,en;q=0.9",
+                "User-Agent": (
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/131.0.0.0 Safari/537.36"
+                ),
+            }
+        )
+        session.get(
+            "https://dineoncampus.com/sjsu/",
+            timeout=timeout,
+        )
+        get_json = lambda url, request_timeout: _fetch_json(
+            url,
+            request_timeout,
+            session,
+        )
 
     periods_url = _api_url(
         f"/locations/{_LOCATION_ID}/periods/", date=date_text
@@ -132,18 +157,28 @@ def parse_menu_payload(payload: Any) -> dict[str, list[str]]:
     return restaurants
 
 
-def _fetch_json(url: str, timeout: float) -> Any:
-    request = Request(
+def _fetch_json(
+    url: str,
+    timeout: float,
+    session: requests.Session,
+) -> Any:
+    response = session.get(
         url,
+        timeout=timeout,
         headers={
-            "Accept": "application/json",
-            "User-Agent": "TheCommonsMenuScraper/1.0",
             "Origin": "https://dineoncampus.com",
             "Referer": "https://dineoncampus.com/sjsu/",
         },
+        verify=certifi.where(),
     )
-    with urlopen(request, timeout=timeout) as response:
-        return json.load(response)
+
+    if response.status_code >= 400:
+        detail = response.text[:300].replace("\n", " ").strip()
+        raise MenuScrapeError(
+            f"Menu API returned HTTP {response.status_code}: {detail}"
+        )
+
+    return response.json()
 
 
 def _api_url(path: str, **params: str) -> str:
