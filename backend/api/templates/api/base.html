@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}SJSU Dining{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen">
+  <header class="bg-[#0055A2] text-white">
+    <div class="max-w-3xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+      <a href="{% url 'home' %}" class="font-semibold text-lg">SJSU Dining</a>
+      {% if request.session.gmail %}
+        <form method="post" action="{% url 'logout' %}" class="flex items-center gap-2 text-sm">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ request.get_full_path }}">
+          <span class="opacity-90">{{ request.session.gmail }}</span>
+          <button class="underline opacity-80 hover:opacity-100">Sign out</button>
+        </form>
+      {% else %}
+        <a href="{% url 'login' %}?next={{ request.get_full_path|urlencode }}"
+           class="rounded bg-[#E5A823] text-slate-900 font-medium px-3 py-1 text-sm">Sign in</a>
+      {% endif %}
+    </div>
+  </header>
+  <main class="max-w-3xl mx-auto px-4 py-6">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

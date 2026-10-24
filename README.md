@@ -5,3 +5,38 @@
 [event timeline](https://sparthillhack2026.vercel.app/timeline)
 
 [dev post prompts](https://sparthill-ibm-2026.devpost.com/)
+
+## Running the backend locally
+
+Requires Python 3.12+ (Django 6.1).
+
+1. Create and activate a virtual environment, then install dependencies:
+
+   ```sh
+   python3 -m venv .venv
+   source .venv/bin/activate        # fish: source .venv/bin/activate.fish
+   pip install -r requirements.txt
+   ```
+
+2. Create the env file. Settings refuse to start without `SECRET_KEY` and `GOOGLE_OAUTH_CLIENT_ID`:
+
+   ```sh
+   cp .env.example backend/.env
+   python -c "import secrets; print(secrets.token_urlsafe(50))"   # paste into SECRET_KEY
+   ```
+
+   Any non-empty `GOOGLE_OAUTH_CLIENT_ID` works until Google login is wired up.
+
+3. Apply migrations and start the dev server:
+
+   ```sh
+   cd backend
+   python manage.py migrate
+   python manage.py runserver
+   ```
+
+   App runs at http://127.0.0.1:8000/ (admin at `/admin/`, API routes under `/api/`).
+
+4. Optional: create an admin user with `python manage.py createsuperuser`.
+
+Note: `lib/food_recommender.py` downloads an embedding model via `fastembed` on first use.

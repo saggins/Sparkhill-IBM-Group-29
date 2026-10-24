@@ -1,7 +1,11 @@
 from django.urls import path
-from .views import add_rating, rating_list
+from . import views
 
 urlpatterns = [
-    path('rating_list/', rating_list, name='rating-list'),
-    path('add_rating/<int:pk>/', add_rating, name='add-rating'),
+    path('', views.home, name='home'),
+    path('menu/<str:date>/<slug:period>/', views.menu, name='menu'),
+    path('vote/', views.vote, name='vote'),
+    path('login/', views.login, name='login'),
+    path('auth/google/', views.google_auth, name='google-auth'),
+    path('logout/', views.logout, name='logout'),
 ]

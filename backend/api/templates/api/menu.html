@@ -1,0 +1,60 @@
+{% extends "api/base.html" %}
+
+{% block title %}{{ location_name }} · {{ day|date:"M j" }} · SJSU Dining{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-bold">{{ location_name }}</h1>
+
+<div class="mt-4 flex items-center gap-2">
+  <a href="{% url 'menu' prev_day period %}"
+     class="rounded border bg-white px-3 py-1.5 hover:bg-slate-100" aria-label="Previous day">&larr;</a>
+  <form method="get" class="flex-1">
+    <input type="date" name="date" value="{{ day|date:'Y-m-d' }}" onchange="this.form.submit()"
+           class="w-full rounded border bg-white px-3 py-1.5">
+  </form>
+  <a href="{% url 'menu' next_day period %}"
+     class="rounded border bg-white px-3 py-1.5 hover:bg-slate-100" aria-label="Next day">&rarr;</a>
+</div>
+<p class="mt-1 text-sm text-slate-500">{{ day|date:"l, F j, Y" }}</p>
+
+<nav class="mt-4 flex border-b overflow-x-auto">
+  {% for key, label in periods %}
+    <a href="{% url 'menu' day|date:'Y-m-d' key %}"
+       class="px-4 py-2 -mb-px border-b-2 whitespace-nowrap
+              {% if key == period %}border-[#0055A2] text-[#0055A2] font-semibold{% else %}border-transparent text-slate-600 hover:text-slate-900{% endif %}">
+      {{ label }}
+    </a>
+  {% endfor %}
+</nav>
+
+{% if not gmail and items %}
+  <p class="mt-4 rounded bg-amber-50 border border-amber-200 px-3 py-2 text-sm">
+    <a href="{% url 'login' %}?next={{ request.get_full_path|urlencode }}" class="underline">Sign in with Google</a> to rate dishes.
+  </p>
+{% endif %}
+
+{% if items %}
+  <ul class="mt-4 divide-y rounded-lg border bg-white">
+    {% for item in items %}
+      <li class="flex items-center justify-between gap-3 px-4 py-3">
+        <span>{{ item.food.name }}</span>
+        <form method="post" action="{% url 'vote' %}" class="flex gap-1 shrink-0">
+          {% csrf_token %}
+          <input type="hidden" name="food_id" value="{{ item.food.pk }}">
+          <input type="hidden" name="next" value="{{ request.get_full_path }}">
+          <button name="vote" value="up" {% if not gmail %}disabled{% endif %}
+                  aria-pressed="{% if item.vote == 'up' %}true{% else %}false{% endif %}" aria-label="Thumbs up"
+                  class="rounded-full w-10 h-10 border disabled:opacity-40
+                         {% if item.vote == 'up' %}bg-green-100 border-green-500{% else %}hover:bg-slate-100{% endif %}">👍</button>
+          <button name="vote" value="down" {% if not gmail %}disabled{% endif %}
+                  aria-pressed="{% if item.vote == 'down' %}true{% else %}false{% endif %}" aria-label="Thumbs down"
+                  class="rounded-full w-10 h-10 border disabled:opacity-40
+                         {% if item.vote == 'down' %}bg-red-100 border-red-500{% else %}hover:bg-slate-100{% endif %}">👎</button>
+        </form>
+      </li>
+    {% endfor %}
+  </ul>
+{% else %}
+  <p class="mt-8 text-center text-slate-500">No menu loaded for this meal.</p>
+{% endif %}
+{% endblock %}

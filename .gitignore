@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Environments
+.env
+.venv
+.direnv/
+
+# Local data / caches
+*.sqlite3
+.cache
+
+config
+.DS_Store

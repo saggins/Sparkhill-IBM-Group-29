@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 
 from pathlib import Path
 import os
+import sys
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -25,6 +26,9 @@ if not GOOGLE_OAUTH_CLIENT_ID:
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Make the repo-level `lib` package (recommender, scraper) importable.
+sys.path.append(str(BASE_DIR.parent))
 
 
 # Quick-start development settings - unsuitable for production
@@ -44,6 +48,10 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
+# Google Identity Services opens a popup and needs the page's origin in the Referer.
+SECURE_CROSS_ORIGIN_OPENER_POLICY = 'same-origin-allow-popups'
+SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+
 
 # Application definition
 
@@ -54,7 +62,6 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'rest_framework',
     'api'
 ]
 
@@ -123,7 +130,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'America/Los_Angeles'
 
 USE_I18N = True
 
