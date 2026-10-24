@@ -1,0 +1,13 @@
+.git
+.venv
+.direnv
+.cache
+.env
+**/.env
+**/__pycache__
+**/*.py[cod]
+**/*.sqlite3
+backend/staticfiles
+config
+core
+.DS_Store
