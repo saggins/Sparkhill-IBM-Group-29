@@ -174,7 +174,6 @@ def _fetch_json(
 
     if response.status_code >= 400:
         detail = response.text[:300].replace("\n", " ").strip()
-        response.raise_for_status()
         raise MenuScrapeError(
             f"Menu API returned HTTP {response.status_code}: {detail}"
         )
