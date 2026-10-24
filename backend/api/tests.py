@@ -3,7 +3,7 @@ import tempfile
 from unittest import mock
 
 from django.core.management import call_command
-from django.test import TestCase
+from django.test import Client, TestCase
 from django.urls import reverse
 
 from .models import Food, MenuEntry, UserRating
@@ -70,6 +70,24 @@ class MenuViewTests(TestCase):
         self.assertNotContains(resp, 'You might like this')
         self.assertNotContains(resp, 'bg-green-50')
 
+    @mock.patch('api.views.should_recommend')
+    def test_recommended_items_first_and_alphabetical_within_groups(self, recommend):
+        gmail = 'spartan@sjsu.edu'
+        session = self.client.session
+        session['gmail'] = gmail
+        session.save()
+        UserRating.objects.create(gmail=gmail, food=self.soup, is_upvoted=True)
+        for food_id, name in enumerate(['Apple', 'Zucchini', 'Rice'], start=3):
+            food = Food.objects.create(name=name, food_id=food_id)
+            MenuEntry.objects.create(food=food, date=DAY, meal_period='lunch')
+        recommend.side_effect = lambda food, ratings, user: food in ('Zucchini', 'Rice')
+
+        resp = self.client.get(menu_url())
+        self.assertEqual([item['food'].name for item in resp.context['items']],
+                         ['Rice', 'Zucchini', 'Apple', 'Pepperoni Pizza'])
+        html = resp.content.decode()
+        self.assertLess(html.index('Zucchini'), html.index('Apple'))
+
 
 class VoteTests(TestCase):
     def setUp(self):
@@ -121,6 +139,54 @@ class VoteTests(TestCase):
 
         self.vote('down')  # clicking the active thumb clears it
         self.assertFalse(UserRating.objects.exists())
+
+    @mock.patch('api.views.should_recommend')
+    def test_first_dislike_saves_and_renders_without_loading_model(self, recommend):
+        self.client = Client(enforce_csrf_checks=True)
+        session = self.client.session
+        session['gmail'] = self.gmail
+        session.save()
+        MenuEntry.objects.create(food=self.food, date=DAY, meal_period='lunch')
+        other = Food.objects.create(name='Tomato Soup', food_id=2)
+        MenuEntry.objects.create(food=other, date=DAY, meal_period='lunch')
+        self.client.get(menu_url())
+
+        resp = self.client.post(reverse('vote'), {
+            'food_id': self.food.pk, 'vote': 'down', 'next': menu_url(),
+            'csrfmiddlewaretoken': self.client.cookies['csrftoken'].value,
+        }, follow=True)
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(UserRating.objects.get(gmail=self.gmail, food=self.food).is_upvoted)
+        self.assertContains(resp, 'aria-pressed="true" aria-label="Thumbs down"')
+        self.assertNotContains(resp, 'You might like this')
+        recommend.assert_not_called()
+
+        # Supply the CSRF token when clearing the vote as well.
+        self.client.post(reverse('vote'), {
+            'food_id': self.food.pk, 'vote': 'down', 'next': menu_url(),
+            'csrfmiddlewaretoken': self.client.cookies['csrftoken'].value,
+        })
+        self.assertFalse(UserRating.objects.exists())
+
+    @mock.patch('api.views.should_recommend', side_effect=RuntimeError('Model unavailable'))
+    def test_dislike_visible_even_when_recommendations_fail(self, recommend):
+        self.login()
+        liked = Food.objects.create(name='Tomato Soup', food_id=2)
+        unvoted = Food.objects.create(name='Rice', food_id=3)
+        UserRating.objects.create(gmail=self.gmail, food=liked, is_upvoted=True)
+        for food in (self.food, liked, unvoted):
+            MenuEntry.objects.create(food=food, date=DAY, meal_period='lunch')
+
+        with self.assertLogs('api.views', level='ERROR'):
+            resp = self.client.post(reverse('vote'), {
+                'food_id': self.food.pk, 'vote': 'down', 'next': menu_url(),
+            }, follow=True)
+
+        self.assertFalse(UserRating.objects.get(gmail=self.gmail, food=self.food).is_upvoted)
+        self.assertContains(resp, 'aria-pressed="true" aria-label="Thumbs down"')
+        self.assertEqual(resp.context['items'][0]['food'], liked)
+        recommend.assert_called_once()
 
     @mock.patch('api.views.should_recommend', return_value=True)
     def test_vote_state_rendered(self, recommend):

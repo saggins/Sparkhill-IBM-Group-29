@@ -1,4 +1,5 @@
 import datetime
+import logging
 
 from django.conf import settings
 from django.http import Http404, HttpResponseBadRequest, HttpResponseForbidden
@@ -15,6 +16,7 @@ from .models import Food, MenuEntry, UserRating
 
 LOCATION_NAME = 'The Commons'
 PERIODS = dict(MenuEntry.MEAL_PERIODS)
+logger = logging.getLogger(__name__)
 
 
 @require_GET
@@ -56,10 +58,23 @@ def menu(request, date, period):
         {
             'food': e.food,
             'vote': None if e.food_id not in votes else 'up' if votes[e.food_id] else 'down',
-            'recommended': bool(ratings) and should_recommend(e.food.name, ratings, gmail),
+            'recommended': votes.get(e.food_id, False),
         }
         for e in entries
     ]
+
+    # Known votes need no model, and dislikes alone cannot yield recommendations.
+    if any(liked for _, _, liked in ratings):
+        try:
+            for item in items:
+                if item['vote'] is None:
+                    item['recommended'] = should_recommend(item['food'].name, ratings, gmail)
+        except Exception:
+            # A model download/inference failure must not hide a saved vote.
+            logger.exception('Could not generate menu recommendations')
+
+    # Stable sort keeps the alphabetical order within each group.
+    items.sort(key=lambda item: not item['recommended'])
 
     return render(request, 'api/menu.html', {
         'location_name': LOCATION_NAME,
