@@ -39,4 +39,18 @@ Requires Python 3.12+ (Django 6.1).
 
 4. Optional: create an admin user with `python manage.py createsuperuser`.
 
+## Seeding menu items
+
+`seed_menu` loads one meal period of The Commons menu into the database. It scrapes the Dine On Campus API via `lib/menu_scraper.py`, creating any new `Food` rows and a `MenuEntry` per item. Re-running is safe; existing entries are skipped.
+
+```sh
+cd backend
+python manage.py seed_menu --period lunch                      # today
+python manage.py seed_menu --period dinner --date 2026-10-24   # specific date
+python manage.py seed_menu --period breakfast --dry-run        # print items, save nothing
+python manage.py seed_menu --period lunch --names-file foods.txt   # skip scraping, one name per line
+```
+
+`--period` is required: `breakfast`, `lunch`, or `dinner`.
+
 Note: `lib/food_recommender.py` downloads an embedding model via `fastembed` on first use.

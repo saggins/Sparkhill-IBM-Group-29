@@ -6,8 +6,6 @@ from django.db.models import Max
 
 from api.models import Food, MenuEntry
 
-MENU_URL = 'https://dineoncampus.com/SJSU/whats-on-the-menu/the-commons/{date}/{period}'
-
 
 def normalize(name):
     # Same whitespace rule as lib.food_recommender, but keep the original casing for display.
@@ -78,12 +76,13 @@ class Command(BaseCommand):
             with open(names_file) as f:
                 return f.read().splitlines()
 
+        from urllib.error import URLError
+
+        from lib.menu_scraper import MenuScrapeError, scrape_menu
+
+        self.stdout.write(f'Scraping The Commons {period} for {date}')
         try:
-            from lib.scraper import scrape_menu
-        except ImportError:
-            raise CommandError(
-                'lib.scraper.scrape_menu not found. Use --names-file until the scraper lands.'
-            )
-        url = MENU_URL.format(date=date.isoformat(), period=period)
-        self.stdout.write(f'Scraping {url}')
-        return scrape_menu(url)
+            restaurants = scrape_menu(date, period)
+        except (MenuScrapeError, URLError) as e:
+            raise CommandError(f'Menu scrape failed: {e}')
+        return [food for foods in restaurants.values() for food in foods]
