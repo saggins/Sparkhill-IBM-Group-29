@@ -1,6 +1,6 @@
 .cache
-backend
 config
 __pycache__/
 .env
 .venv
+.direnv/
