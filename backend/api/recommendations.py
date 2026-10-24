@@ -1,9 +1,9 @@
 # Recommendation logic
 
 
-from django.db.models import Avg, Count
+from django.db.models import Avg
 
-from .models import MenuItem, UserDownvotes, UserRatings
+from .models import MenuEntry, UserDownvotes, UserRatings
 
 
 def get_recommendations_for_user(gmail, recommendation_date):
@@ -11,33 +11,25 @@ def get_recommendations_for_user(gmail, recommendation_date):
         gmail=gmail
     ).values_list("food_id", flat=True)
 
-    rated_food_ids = UserRatings.objects.filter(
-        gmail=gmail
-    ).values_list("food_id", flat=True)
-
-    menu_items = (
-        MenuItem.objects
-        .filter(service_date=recommendation_date)
+    menu_entries = (
+        MenuEntry.objects
+        .filter(
+            location="the-commons",
+            date=recommendation_date,
+        )
         .exclude(food_id__in=downvoted_food_ids)
         .annotate(
-            average_rating=Avg(
-                "food__user_ratings__rating",
-                filter=None,
-            ),
-            user_rating_count=Count(
-                "food__user_ratings",
-                filter=None,
-            ),
+            average_rating=Avg("food__user_ratings__rating"),
         )
         .order_by("-average_rating", "food__name")
     )
 
     recommendations = []
 
-    for item in menu_items:
+    for entry in menu_entries:
         personal_rating = (
             UserRatings.objects
-            .filter(gmail=gmail, food=item.food)
+            .filter(gmail=gmail, food=entry.food)
             .values_list("rating", flat=True)
             .first()
         )
@@ -48,19 +40,19 @@ def get_recommendations_for_user(gmail, recommendation_date):
         elif personal_rating is not None:
             score = float(personal_rating)
         else:
-            score = float(item.average_rating or 0)
+            score = float(entry.average_rating or 0)
 
         recommendations.append(
             {
-                "food_name": item.food.name,
-                "meal": item.meal,
+                "food_name": entry.food.name,
+                "meal": entry.meal_period,
                 "score": score,
                 "personal_rating": (
                     float(personal_rating)
                     if personal_rating is not None
                     else None
                 ),
-                "average_rating": float(item.average_rating or 0),
+                "average_rating": float(entry.average_rating or 0),
             }
         )
 
